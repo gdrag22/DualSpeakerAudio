@@ -102,3 +102,84 @@ cmake --build build --config Release
 The executable is created at `build\Release\DualMonitorAudio.exe`. MSVC builds
 statically link the C++ runtime, so users do not need to install the Visual C++
 redistributable.
+
+### Adjust the audio buffer
+
+If the secondary output has too much delay, or you hear crackling or dropouts,
+you can adjust the application's buffer target. This requires the source code
+and the build tools above; there is no command-line buffer setting.
+
+The buffer provides headroom for variations in audio delivery. It does not need
+to match a device's sample rate. Smaller targets can reduce delay but make
+dropouts more likely; larger targets provide more headroom at the cost of delay.
+
+1. Close the running application.
+2. Open `src/main.cpp` and find this line:
+
+   ```cpp
+   const auto target = static_cast<size_t>(sampleRate_ * std::max(0.015, periodSeconds));
+   ```
+
+3. Change **`0.015`**, which is a duration in seconds. For example:
+
+   | Value | Buffer target | When to try it |
+   | --- | --- | --- |
+   | `0.010` | 10 ms | Try less delay if playback is stable. |
+   | `0.015` | 15 ms | Current default. |
+   | `0.020` | 20 ms | Try more headroom for crackling or dropouts. |
+   | `0.030` | 30 ms | Try more headroom if 20 ms is insufficient. |
+
+   Keep `periodSeconds` in the expression. `std::max` uses whichever is larger:
+   your chosen duration or one device period. A slower device can therefore
+   prevent a smaller value from reducing the effective target.
+
+4. Save the file, then run these commands from the repository folder:
+
+   ```bat
+   cmake -S . -B build -A x64
+   cmake --build build --config Release
+   ```
+
+5. Launch the newly built **`build\Release\DualMonitorAudio.exe`**. An executable
+   downloaded earlier or copied to another folder will still use its old setting.
+   The startup message shows the effective jitter-buffer target in milliseconds.
+
+Change one value at a time and test with normal playback, including games and
+pausing/resuming audio. If a smaller target causes problems, restore the previous
+value and rebuild. Leave the FIFO capacity expression on the following line
+unchanged; it limits queued audio rather than setting the normal target delay.
+
+The displayed buffer target is only part of the total delay. Windows audio
+processing and monitor hardware add latency too, so adjusting this value cannot
+guarantee perfect synchronization. Repeated startup messages indicate the audio
+route is restarting; increasing the buffer does not address that cause.
+
+### If `cmake` is not recognized
+
+This means the terminal cannot find `cmake.exe`. It is a build-tool setup issue;
+people downloading the ready-to-run executable do not need CMake.
+
+If CMake is installed with Visual Studio, its `bin` folder may not be on your
+PATH. For example, Visual Studio 2022 Professional may install it at:
+
+```text
+C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin
+```
+
+Your path may differ by Visual Studio version, edition, and installation location.
+Confirm that the folder contains `cmake.exe` before adding it.
+
+To make it available in future terminals:
+
+1. Search Windows Start for **Edit environment variables for your account**.
+2. Under **User variables**, select **Path**, then click **Edit**.
+3. Click **New**, paste the folder containing `cmake.exe`, and confirm with **OK**
+   in each dialog. Add the folder, without quotes; do not replace existing entries.
+4. Close and reopen your terminal. If using VS Code's integrated terminal, fully
+   restart VS Code so it receives the updated PATH.
+5. Run `cmake --version` to verify that Windows can find it, then retry the build
+   commands above.
+
+If CMake is not installed, add **C++ CMake tools for Windows** through the Visual
+Studio Installer, or install CMake separately and select its option to add CMake
+to PATH. CMake alone does not install the C++ compiler or Windows SDK.
